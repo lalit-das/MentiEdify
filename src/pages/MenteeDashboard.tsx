@@ -1,7 +1,7 @@
 // src/pages/MenteeDashboard.tsx
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // ✅ ADD THIS
+import { useNavigate } from "react-router-dom";
 import { Calendar, Clock, BookOpen, MessageSquare, Star, Target, User, Video, Bot, Plus, X, Briefcase, Users, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
