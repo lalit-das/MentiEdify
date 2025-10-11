@@ -1,6 +1,7 @@
 // src/pages/MenteeDashboard.tsx
 
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // ✅ ADD THIS
 import { Calendar, Clock, BookOpen, MessageSquare, Star, Target, User, Video, Bot, Plus, X, Briefcase, Users, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,11 +18,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { AIChat } from '@/components/AIChat';
-import { RescheduleModal } from '@/components/RescheduleModal'; // ✅ NEW IMPORT
+import { RescheduleModal } from '@/components/RescheduleModal';
 
 const MenteeDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate(); // ✅ ADD THIS
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
   const [completedSessions, setCompletedSessions] = useState<any[]>([]);
   const [learningGoals, setLearningGoals] = useState<any[]>([]);
@@ -38,16 +40,13 @@ const MenteeDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showAIChat, setShowAIChat] = useState(false);
 
-  // ✅ Reschedule modal states
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [selectedSessionForReschedule, setSelectedSessionForReschedule] = useState<any>(null);
 
-  // ✅ Quick Actions Modal States
   const [showGoalsModal, setShowGoalsModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showMentorsModal, setShowMentorsModal] = useState(false);
   
-  // ✅ Form States
   const [newGoal, setNewGoal] = useState({ goal: '', target: '', progress: 0 });
   const [myMentors, setMyMentors] = useState<any[]>([]);
   const [selectedSessionForReview, setSelectedSessionForReview] = useState<any>(null);
@@ -137,17 +136,27 @@ const MenteeDashboard = () => {
     }
   };
 
-  // ✅ NEW: Handle reschedule button click
   const handleOpenReschedule = (session: any) => {
     setSelectedSessionForReschedule(session);
     setShowRescheduleModal(true);
   };
 
-  // ✅ NEW: Handle successful reschedule
   const handleRescheduleSuccess = () => {
     setShowRescheduleModal(false);
     setSelectedSessionForReschedule(null);
-    fetchMenteeData(); // Refresh data
+    fetchMenteeData();
+  };
+
+  // ✅ NEW: Handle "Book Again" click
+  const handleBookAgain = (session: any) => {
+    // Navigate to the mentor's booking page
+    navigate(`/mentor/${session.mentor_id}/book`, {
+      state: {
+        // Optional: Pass previous session data for reference
+        previousTopic: session.topic,
+        fromHistory: true
+      }
+    });
   };
 
   const fetchMenteeData = async () => {
@@ -164,12 +173,12 @@ const MenteeDashboard = () => {
         setInterests(userData.interests || []);
       }
 
-      // ✅ UPDATED: Added reschedule_count to query
+      // ✅ Fetch upcoming sessions with mentor_id
       const { data: upcomingData, error: upcomingError } = await supabase
         .from('bookings')
         .select(`
           *,
-          mentors(name, title),
+          mentors(id, name, title),
           reschedule_count
         `)
         .eq('mentee_id', user?.id)
@@ -180,27 +189,28 @@ const MenteeDashboard = () => {
 
       if (upcomingError) throw upcomingError;
 
-      // ✅ UPDATED: Added rawDate, rawTime, and rescheduleCount
       const formattedUpcoming = (upcomingData || []).map((booking: any) => ({
         id: booking.id,
+        mentor_id: booking.mentor_id, // ✅ Include mentor_id
         mentor: booking.mentors?.name || 'Unknown Mentor',
         time: booking.session_time,
         date: new Date(booking.session_date).toLocaleDateString(),
-        rawDate: booking.session_date, // ✅ For RescheduleModal
-        rawTime: booking.session_time, // ✅ For RescheduleModal
+        rawDate: booking.session_date,
+        rawTime: booking.session_time,
         topic: booking.notes || 'General Mentoring Session',
         type: booking.session_type === 'video' ? 'Video Call' : 
               booking.session_type === 'audio' ? 'Audio Call' : 'Chat Session',
-        rescheduleCount: booking.reschedule_count ?? 0 // ✅ Track reschedules
+        rescheduleCount: booking.reschedule_count ?? 0
       }));
 
       setUpcomingSessions(formattedUpcoming);
 
+      // ✅ Fetch completed sessions with mentor_id
       const { data: completedData, error: completedError } = await supabase
         .from('bookings')
         .select(`
           *,
-          mentors(name, title),
+          mentors(id, name, title),
           reviews(rating, review_text)
         `)
         .eq('mentee_id', user?.id)
@@ -212,6 +222,7 @@ const MenteeDashboard = () => {
 
       const formattedCompleted = (completedData || []).map((booking: any) => ({
         id: booking.id,
+        mentor_id: booking.mentor_id, // ✅ Include mentor_id for "Book Again"
         mentor: booking.mentors?.name || 'Unknown Mentor',
         date: new Date(booking.session_date).toLocaleDateString(),
         topic: booking.notes || 'General Mentoring Session',
@@ -249,7 +260,6 @@ const MenteeDashboard = () => {
     }
   };
 
-  // ✅ Fetch Learning Goals
   const fetchLearningGoals = async () => {
     try {
       const { data: userData } = await supabase
@@ -273,7 +283,6 @@ const MenteeDashboard = () => {
     }
   };
 
-  // ✅ Add Learning Goal
   const handleAddGoal = async () => {
     if (!newGoal.goal.trim()) {
       toast({
@@ -319,7 +328,6 @@ const MenteeDashboard = () => {
     }
   };
 
-  // ✅ Fetch My Mentors
   const fetchMyMentors = async () => {
     try {
       const { data, error } = await supabase
@@ -355,7 +363,6 @@ const MenteeDashboard = () => {
     }
   };
 
-  // ✅ Open Review Modal
   const handleOpenReview = () => {
     const sessionsWithoutReview = completedSessions.filter(s => !s.hasReview);
     
@@ -371,7 +378,6 @@ const MenteeDashboard = () => {
     setShowReviewModal(true);
   };
 
-  // ✅ Submit Review
   const handleSubmitReview = async () => {
     if (!selectedSessionForReview || !reviewData.review_text.trim()) {
       toast({
@@ -555,7 +561,6 @@ const MenteeDashboard = () => {
                               <Clock className="h-4 w-4" />
                               {session.date} at {session.time}
                             </div>
-                            {/* ✅ Show reschedule count badge */}
                             {session.rescheduleCount > 0 && (
                               <Badge variant="outline" className="text-xs mt-1">
                                 Rescheduled {session.rescheduleCount}x
@@ -565,7 +570,6 @@ const MenteeDashboard = () => {
                           <div className="text-right space-y-2 ml-4">
                             <Badge variant="outline">{session.type}</Badge>
                             <div className="flex gap-2">
-                              {/* ✅ Updated Reschedule Button */}
                               <Button 
                                 size="sm" 
                                 variant="outline"
@@ -591,13 +595,12 @@ const MenteeDashboard = () => {
                       <p className="text-muted-foreground mb-4">Book your first mentorship session</p>
                     </div>
                   )}
-                  <Button className="w-full" variant="outline" onClick={() => window.location.href = '/explore'}>
+                  <Button className="w-full" variant="outline" onClick={() => navigate('/explore')}>
                     Book New Session
                   </Button>
                 </CardContent>
               </Card>
 
-              {/* ✅ Quick Actions with Full Functionality */}
               <Card>
                 <CardHeader>
                   <CardTitle>Quick Actions</CardTitle>
@@ -608,7 +611,7 @@ const MenteeDashboard = () => {
                     <Bot className="mr-2 h-4 w-4" />
                     AI Learning Assistant
                   </Button>
-                  <Button className="w-full justify-start" variant="outline" onClick={() => window.location.href = '/explore'}>
+                  <Button className="w-full justify-start" variant="outline" onClick={() => navigate('/explore')}>
                     <User className="mr-2 h-4 w-4" />
                     Find New Mentors
                   </Button>
@@ -762,6 +765,7 @@ const MenteeDashboard = () => {
             </Card>
           </TabsContent>
 
+          {/* ✅ UPDATED: Session History Tab with functional "Book Again" */}
           <TabsContent value="history" className="space-y-6">
             <Card>
               <CardHeader>
@@ -772,23 +776,40 @@ const MenteeDashboard = () => {
                 {completedSessions.length > 0 ? (
                   <>
                     {completedSessions.map((session) => (
-                      <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="space-y-1">
-                          <h4 className="font-medium">{session.mentor}</h4>
+                      <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
+                        <div className="space-y-1 flex-1">
+                          <h4 className="font-medium text-lg">{session.mentor}</h4>
                           <p className="text-sm text-muted-foreground">{session.topic}</p>
                           <p className="text-xs text-muted-foreground">{session.date}</p>
-                        </div>
-                        <div className="text-right">
-                          {session.hasReview ? (
-                            <div className="flex items-center gap-1 mb-2">
-                              {[...Array(session.rating)].map((_, i) => (
-                                <Star key={i} className="h-4 w-4 fill-current text-yellow-400" />
+                          {session.hasReview && (
+                            <div className="flex items-center gap-1 mt-2">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`h-4 w-4 ${
+                                    i < session.rating
+                                      ? 'fill-yellow-400 text-yellow-400'
+                                      : 'text-gray-300'
+                                  }`}
+                                />
                               ))}
                             </div>
-                          ) : (
-                            <Badge variant="outline" className="mb-2">No Review</Badge>
                           )}
-                          <Button size="sm" variant="outline">Book Again</Button>
+                        </div>
+                        <div className="text-right space-y-2">
+                          {!session.hasReview && (
+                            <Badge variant="outline" className="mb-2 block">No Review</Badge>
+                          )}
+                          {/* ✅ UPDATED: "Book Again" button with navigation */}
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleBookAgain(session)}
+                            className="w-full"
+                          >
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Book Again
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -806,7 +827,6 @@ const MenteeDashboard = () => {
         </Tabs>
       </main>
 
-      {/* ✅ AI Chat Modal */}
       {showAIChat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <AIChat 
@@ -816,7 +836,6 @@ const MenteeDashboard = () => {
         </div>
       )}
 
-      {/* ✅ NEW: Reschedule Modal */}
       {showRescheduleModal && selectedSessionForReschedule && (
         <RescheduleModal
           session={{
@@ -834,7 +853,6 @@ const MenteeDashboard = () => {
         />
       )}
 
-      {/* ✅ Set Goals Modal */}
       <Dialog open={showGoalsModal} onOpenChange={setShowGoalsModal}>
         <DialogContent>
           <DialogHeader>
@@ -870,7 +888,6 @@ const MenteeDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Leave Review Modal */}
       <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
         <DialogContent>
           <DialogHeader>
@@ -919,7 +936,6 @@ const MenteeDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ My Mentors Modal */}
       <Dialog open={showMentorsModal} onOpenChange={setShowMentorsModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -945,7 +961,16 @@ const MenteeDashboard = () => {
                           <MessageSquare className="h-4 w-4 mr-1" />
                           Message
                         </Button>
-                        <Button size="sm">Book Again</Button>
+                        {/* ✅ "Book Again" in My Mentors modal */}
+                        <Button 
+                          size="sm"
+                          onClick={() => {
+                            setShowMentorsModal(false);
+                            navigate(`/mentor/${mentor.id}/book`);
+                          }}
+                        >
+                          Book Again
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
