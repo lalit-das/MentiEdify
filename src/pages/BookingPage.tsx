@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Video, Phone, MessageSquare, Check } from "lucide-react";
+import { ArrowLeft, Video, Phone, MessageSquare, Check, Calendar as CalendarIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,6 @@ import Footer from "@/components/Footer";
 
 const BookingPage = () => {
   const [searchParams] = useSearchParams();
-  // ✅ FIXED: Changed from "mentor" to "mentorId" to match MentorCard
   const mentorId = searchParams.get("mentorId");
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -33,7 +32,7 @@ const BookingPage = () => {
   const [booking, setBooking] = useState(false);
 
   useEffect(() => {
-    console.log('📝 BookingPage received mentorId:', mentorId); // Debug log
+    console.log('📝 BookingPage received mentorId:', mentorId);
     
     if (!mentorId) {
       toast({
@@ -52,6 +51,7 @@ const BookingPage = () => {
       setLoading(true);
       console.log('🔍 Fetching mentor data for ID:', mentorId);
 
+      // Fetch mentor details
       const { data: mentorData, error: mentorError } = await supabase
         .from("mentors")
         .select("*")
@@ -73,21 +73,24 @@ const BookingPage = () => {
         return;
       }
       
-      console.log('✅ Mentor data loaded:', mentorData.name);
+      console.log(' Mentor data loaded:', mentorData.name);
       setMentor(mentorData);
 
       const { data: availabilityData, error: availabilityError } = await supabase
         .from("mentor_availability")
         .select("*")
         .eq("mentor_id", mentorId)
-        .eq("is_available", true);
+        .eq("is_available", true)
+        .order('day_of_week', { ascending: true })
+        .order('start_time', { ascending: true });
 
       if (availabilityError) {
         console.warn('⚠️ Availability fetch error:', availabilityError);
       }
-      setAvailability(availabilityData || []);
       
-      console.log('📅 Available slots:', availabilityData?.length || 0);
+      setAvailability(availabilityData || []);
+      console.log('📅 Available time slots:', availabilityData?.length || 0);
+      
     } catch (error) {
       console.error("Error fetching mentor data:", error);
       toast({
@@ -126,41 +129,64 @@ const BookingPage = () => {
     },
   ];
 
-  const generateAvailableSlots = () => {
-    const slots = [];
-    const today = new Date();
+// ✅ NEW: Generate default time slots if mentor hasn't set availability
+const generateAvailableSlots = () => {
+  const slots = [];
+  const today = new Date();
 
-    for (let i = 1; i <= 14; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      const dayOfWeek = date.getDay();
+  // ✅ DEFAULT AVAILABILITY: If no availability set, show Mon-Fri 9am-5pm
+  const hasAvailability = availability.length > 0;
+  
+  const defaultAvailability = [
+    { day_of_week: 1, start_time: '09:00:00', end_time: '17:00:00' }, // Monday
+    { day_of_week: 2, start_time: '09:00:00', end_time: '17:00:00' }, // Tuesday
+    { day_of_week: 3, start_time: '09:00:00', end_time: '17:00:00' }, // Wednesday
+    { day_of_week: 4, start_time: '09:00:00', end_time: '17:00:00' }, // Thursday
+    { day_of_week: 5, start_time: '09:00:00', end_time: '17:00:00' }, // Friday
+  ];
 
-      const dayAvailability = availability.filter((avail) => avail.day_of_week === dayOfWeek);
+  // Use mentor's availability OR default
+  const effectiveAvailability = hasAvailability ? availability : defaultAvailability;
 
-      if (dayAvailability.length > 0) {
-        const daySlots: string[] = [];
-        dayAvailability.forEach((avail) => {
-          const startHour = parseInt(avail.start_time.split(":")[0]);
-          const endHour = parseInt(avail.end_time.split(":")[0]);
+  // Generate slots for next 14 days
+  for (let i = 1; i <= 14; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    const dayOfWeek = date.getDay();
 
-          for (let hour = startHour; hour < endHour; hour++) {
-            daySlots.push(`${hour.toString().padStart(2, "0")}:00`);
-          }
-        });
+    // Find availability for this day
+    const dayAvailability = effectiveAvailability.filter(
+      (avail) => avail.day_of_week === dayOfWeek
+    );
 
-        if (daySlots.length > 0) {
-          slots.push({
-            date: date.toISOString().split("T")[0],
-            slots: daySlots.sort(),
-          });
+    if (dayAvailability.length > 0) {
+      const daySlots: string[] = [];
+      
+      dayAvailability.forEach((avail) => {
+        const startHour = parseInt(avail.start_time.split(":")[0]);
+        const endHour = parseInt(avail.end_time.split(":")[0]);
+
+        // Generate hourly slots
+        for (let hour = startHour; hour < endHour; hour++) {
+          daySlots.push(`${hour.toString().padStart(2, "0")}:00`);
         }
+      });
+
+      if (daySlots.length > 0) {
+        slots.push({
+          date: date.toISOString().split("T")[0],
+          slots: daySlots.sort(),
+          isDefault: !hasAvailability // ✅ Flag to show if using defaults
+        });
       }
     }
+  }
 
-    return slots;
-  };
+  return slots;
+};
 
-  const availableSlots = generateAvailableSlots();
+const availableSlots = generateAvailableSlots();
+
 
   const handleBooking = async () => {
     if (!user) {
@@ -186,7 +212,7 @@ const BookingPage = () => {
       setBooking(true);
       console.log('📅 Creating booking...', { mentorId, userId: user.id, date: selectedDate, time: selectedTime });
 
-      // Ensure user exists in users table
+      // Ensure user exists
       const { data: existingUser, error: userCheckError } = await supabase
         .from('users')
         .select('id, email, first_name, last_name')
@@ -194,7 +220,7 @@ const BookingPage = () => {
         .single();
 
       if (userCheckError || !existingUser) {
-        console.log('Creating user record for booking...');
+        console.log('Creating user record...');
         
         const { error: createUserError } = await supabase
           .from('users')
@@ -208,18 +234,18 @@ const BookingPage = () => {
 
         if (createUserError) {
           console.error('Error creating user:', createUserError);
-          throw new Error('Failed to create user profile. Please try again.');
+          throw new Error('Failed to create user profile.');
         }
       }
 
       const selectedPkg = packages.find((p) => p.id === selectedPackage);
 
-      // Format time properly
+      // Format time with seconds
       const timeFormatted = selectedTime.includes(':')
         ? (selectedTime.split(':').length === 2 ? `${selectedTime}:00` : selectedTime)
         : `${selectedTime}:00:00`;
 
-      // Create booking
+      // ✅ Create booking (NO time_slot_id needed)
       const { error } = await supabase.from("bookings").insert({
         mentor_id: mentorId,
         mentee_id: user.id,
@@ -336,7 +362,7 @@ const BookingPage = () => {
             </Card>
           </div>
 
-          {/* Booking Form - REST OF YOUR CODE REMAINS THE SAME */}
+          {/* Booking Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Package Selection */}
             <Card>
@@ -409,72 +435,73 @@ const BookingPage = () => {
               </CardContent>
             </Card>
 
-            {/* Date & Time Selection */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Select Date & Time</CardTitle>
-                <CardDescription>
-                  {availableSlots.length > 0 
-                    ? "Choose from available slots" 
-                    : "Pick your preferred date and time"
-                  }
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {availableSlots.length === 0 ? (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="date">Date</Label>
-                      <input
-                        id="date"
-                        type="date"
-                        className="border rounded-lg p-2 w-full"
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="time">Time</Label>
-                      <input
-                        id="time"
-                        type="time"
-                        className="border rounded-lg p-2 w-full"
-                        value={selectedTime}
-                        onChange={(e) => setSelectedTime(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  availableSlots.map((daySlot) => (
-                    <div key={daySlot.date} className="space-y-2">
-                      <h4 className="font-medium">
-                        {new Date(daySlot.date).toLocaleDateString("en-US", {
-                          weekday: "long",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </h4>
-                      <div className="grid grid-cols-4 gap-2">
-                        {daySlot.slots.map((time: string) => (
-                          <Button
-                            key={`${daySlot.date}-${time}`}
-                            variant={selectedDate === daySlot.date && selectedTime === time ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => {
-                              setSelectedDate(daySlot.date);
-                              setSelectedTime(time);
-                            }}
-                          >
-                            {time}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
+           {/* Date & Time Selection */}
+<Card>
+  <CardHeader>
+    <CardTitle>Select Date & Time</CardTitle>
+    <CardDescription>
+      {availableSlots.length > 0 
+        ? availableSlots[0]?.isDefault 
+          ? "Default availability shown - mentor hasn't customized yet" 
+          : "Choose from mentor's available slots"
+        : "No slots available"
+      }
+    </CardDescription>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    {availableSlots.length > 0 ? (
+      <>
+        {/* ✅ Show info badge if using defaults */}
+        {availableSlots[0]?.isDefault && (
+          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+            <CalendarIcon className="h-4 w-4 text-blue-600" />
+            <p className="text-sm text-blue-800">
+              <strong>Note:</strong> This mentor uses default availability (Mon-Fri, 9am-5pm). 
+              Booking is subject to mentor confirmation.
+            </p>
+          </div>
+        )}
+
+        {availableSlots.map((daySlot) => (
+          <div key={daySlot.date} className="space-y-2">
+            <h4 className="font-medium flex items-center gap-2">
+              <CalendarIcon className="h-4 w-4" />
+              {new Date(daySlot.date).toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </h4>
+            <div className="grid grid-cols-4 gap-2">
+              {daySlot.slots.map((time: string) => (
+                <Button
+                  key={`${daySlot.date}-${time}`}
+                  variant={selectedDate === daySlot.date && selectedTime === time ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setSelectedDate(daySlot.date);
+                    setSelectedTime(time);
+                  }}
+                  className={daySlot.isDefault ? "border-dashed" : ""}
+                >
+                  {time}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </>
+    ) : (
+      <div className="text-center py-8">
+        <CalendarIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium mb-2">No Slots Available</h3>
+        <p className="text-muted-foreground text-sm">
+          This mentor hasn't set any availability yet. Please try again later.
+        </p>
+      </div>
+    )}
+  </CardContent>
+</Card>
 
             {/* Session Notes */}
             <Card>

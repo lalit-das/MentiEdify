@@ -1,7 +1,5 @@
-// src/pages/MentorDashboard.tsx
-
 import { useState, useEffect } from "react";
-import { Calendar, Clock, DollarSign, Star, Users, Video, MessageSquare, Settings, Bot, X, Save } from "lucide-react";
+import { Calendar, Clock, DollarSign, Star, Users, Video, MessageSquare, Bot, Save } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,15 +15,14 @@ import Footer from "@/components/Footer";
 import { AIChat } from '@/components/AIChat';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import { RescheduleModal } from '@/components/RescheduleModal';
+import { AvailabilityManager } from '@/components/AvailabilityManager'; 
 
 const MentorDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [mentorProfile, setMentorProfile] = useState<any>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
-  const [recentMessages, setRecentMessages] = useState<any[]>([]);
   
-  // ✅ Reschedule modal states
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [selectedSessionForReschedule, setSelectedSessionForReschedule] = useState<any>(null);
   
@@ -40,14 +35,10 @@ const MentorDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showAIChat, setShowAIChat] = useState(false);
 
-  // Other modal states
-  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [showMenteesModal, setShowMenteesModal] = useState(false);
 
-  // Form states
-  const [availabilityData, setAvailabilityData] = useState<any[]>([]);
   const [hourlyRate, setHourlyRate] = useState('');
   const [reviews, setReviews] = useState<any[]>([]);
   const [mentees, setMentees] = useState<any[]>([]);
@@ -298,67 +289,15 @@ const MentorDashboard = () => {
     }
   };
 
-  // ✅ NEW: Handle reschedule button click
   const handleOpenReschedule = (session: any) => {
     setSelectedSessionForReschedule(session);
     setShowRescheduleModal(true);
   };
 
-  // ✅ NEW: Handle successful reschedule
   const handleRescheduleSuccess = () => {
     setShowRescheduleModal(false);
     setSelectedSessionForReschedule(null);
-    fetchMentorData(); // Refresh data
-  };
-
-  const handleOpenAvailability = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('mentor_availability')
-        .select('*')
-        .eq('mentor_id', mentorProfile?.id);
-
-      if (error) throw error;
-
-      setAvailabilityData(data || []);
-      setShowAvailabilityModal(true);
-    } catch (error) {
-      console.error('Error fetching availability:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load availability.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleUpdateAvailability = async () => {
-    try {
-      const { error } = await supabase
-        .from('mentors')
-        .update({ 
-          availability_status: 'available',
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user?.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Availability updated successfully!",
-      });
-
-      setShowAvailabilityModal(false);
-      fetchMentorData();
-    } catch (error) {
-      console.error('Error updating availability:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update availability.",
-        variant: "destructive",
-      });
-    }
+    fetchMentorData();
   };
 
   const handleSetPricing = async () => {
@@ -565,8 +504,9 @@ const MentorDashboard = () => {
         </div>
 
         <Tabs defaultValue="sessions" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="sessions">Sessions</TabsTrigger>
+            <TabsTrigger value="availability">Availability</TabsTrigger>
             <TabsTrigger value="messages">Messages</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -656,14 +596,10 @@ const MentorDashboard = () => {
                   <CardTitle>Quick Actions</CardTitle>
                   <CardDescription>Manage your mentorship activities</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3">
                   <Button className="w-full justify-start" variant="outline" onClick={() => setShowAIChat(true)}>
                     <Bot className="mr-2 h-4 w-4" />
                     AI Mentor Assistant
-                  </Button>
-                  <Button className="w-full justify-start" variant="outline" onClick={handleOpenAvailability}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Update Availability
                   </Button>
                   <Button className="w-full justify-start" variant="outline" onClick={() => setShowPricingModal(true)}>
                     <DollarSign className="mr-2 h-4 w-4" />
@@ -680,6 +616,11 @@ const MentorDashboard = () => {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* ✅ NEW: Availability Tab */}
+          <TabsContent value="availability" className="space-y-6">
+            <AvailabilityManager mentorId={mentorProfile.id} />
           </TabsContent>
 
           <TabsContent value="messages" className="space-y-6">
@@ -730,7 +671,6 @@ const MentorDashboard = () => {
         </Tabs>
       </main>
 
-      {/* ✅ AI Chat Modal */}
       {showAIChat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <AIChat 
@@ -740,51 +680,23 @@ const MentorDashboard = () => {
         </div>
       )}
 
-      {/* ✅ FIXED: Reschedule Modal */}
-{showRescheduleModal && selectedSessionForReschedule && (
-  <RescheduleModal
-    session={{
-      id: selectedSessionForReschedule.id,
-      date: selectedSessionForReschedule.rawDate,
-      time: selectedSessionForReschedule.rawTime,
-      mentee: selectedSessionForReschedule.mentee,
-      topic: selectedSessionForReschedule.topic
-    }}
-    onClose={() => {
-      setShowRescheduleModal(false);
-      setSelectedSessionForReschedule(null);
-    }}
-    onReschedule={handleRescheduleSuccess}
-  />
-)}
+      {showRescheduleModal && selectedSessionForReschedule && (
+        <RescheduleModal
+          session={{
+            id: selectedSessionForReschedule.id,
+            date: selectedSessionForReschedule.rawDate,
+            time: selectedSessionForReschedule.rawTime,
+            mentee: selectedSessionForReschedule.mentee,
+            topic: selectedSessionForReschedule.topic
+          }}
+          onClose={() => {
+            setShowRescheduleModal(false);
+            setSelectedSessionForReschedule(null);
+          }}
+          onReschedule={handleRescheduleSuccess}
+        />
+      )}
 
-
-      {/* ✅ Availability Modal */}
-      <Dialog open={showAvailabilityModal} onOpenChange={setShowAvailabilityModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Update Availability</DialogTitle>
-            <DialogDescription>Manage your availability status</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-sm text-muted-foreground">
-              Your current status: <strong>{mentorProfile?.availability_status}</strong>
-            </p>
-            <p className="text-sm">Availability settings can be managed in detail through the Settings tab.</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAvailabilityModal(false)}>
-              Close
-            </Button>
-            <Button onClick={handleUpdateAvailability}>
-              <Save className="h-4 w-4 mr-2" />
-              Mark as Available
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ✅ Pricing Modal */}
       <Dialog open={showPricingModal} onOpenChange={setShowPricingModal}>
         <DialogContent>
           <DialogHeader>
@@ -815,7 +727,6 @@ const MentorDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Reviews Modal */}
       <Dialog open={showReviewsModal} onOpenChange={setShowReviewsModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -871,7 +782,6 @@ const MentorDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Mentees Modal */}
       <Dialog open={showMenteesModal} onOpenChange={setShowMenteesModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
