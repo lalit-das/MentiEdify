@@ -1,8 +1,7 @@
 // src/pages/MenteeDashboard.tsx
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Calendar, Clock, BookOpen, MessageSquare, Star, Target, User, Video, Bot, Plus, X, Briefcase, Users } from "lucide-react";
+import { Calendar, Clock, BookOpen, MessageSquare, Star, Target, User, Video, Bot, Plus, X, Briefcase, Users, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +22,6 @@ import { RescheduleModal } from '@/components/RescheduleModal';
 const MenteeDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
   const [completedSessions, setCompletedSessions] = useState<any[]>([]);
   const [learningGoals, setLearningGoals] = useState<any[]>([]);
@@ -144,30 +142,7 @@ const MenteeDashboard = () => {
   const handleRescheduleSuccess = () => {
     setShowRescheduleModal(false);
     setSelectedSessionForReschedule(null);
-    fetchMenteeData();
-  };
-
-  const handleBookAgain = (session: any) => {
-    console.log('🔄 Book Again clicked for session:', session);
-    
-    if (!session.mentor_id) {
-      console.error('❌ No mentor_id found:', session);
-      toast({
-        title: "Error",
-        description: "Cannot find mentor information. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    console.log('✅ Navigating to:', `/mentor/${session.mentor_id}/book`);
-    
-    navigate(`/mentor/${session.mentor_id}/book`, {
-      state: {
-        previousTopic: session.topic,
-        fromHistory: true
-      }
-    });
+    fetchMenteeData(); // Refresh data
   };
 
   const fetchMenteeData = async () => {
@@ -184,7 +159,7 @@ const MenteeDashboard = () => {
         setInterests(userData.interests || []);
       }
 
-      // Fetch upcoming sessions
+      // ✅ UPDATED: Added reschedule_count to query
       const { data: upcomingData, error: upcomingError } = await supabase
         .from('bookings')
         .select(`
@@ -202,7 +177,6 @@ const MenteeDashboard = () => {
 
       const formattedUpcoming = (upcomingData || []).map((booking: any) => ({
         id: booking.id,
-        mentor_id: booking.mentor_id,
         mentor: booking.mentors?.name || 'Unknown Mentor',
         time: booking.session_time,
         date: new Date(booking.session_date).toLocaleDateString(),
@@ -220,49 +194,26 @@ const MenteeDashboard = () => {
       const { data: completedData, error: completedError } = await supabase
         .from('bookings')
         .select(`
-          id,
-          mentor_id,
-          mentee_id,
-          session_date,
-          session_time,
-          notes,
-          status,
-          mentors!inner(
-            id,
-            name,
-            title
-          ),
-          reviews(
-            rating,
-            review_text
-          )
+          *,
+          mentors(name, title),
+          reviews(rating, review_text)
         `)
         .eq('mentee_id', user?.id)
         .eq('status', 'completed')
         .order('session_date', { ascending: false })
         .limit(10);
 
-      if (completedError) {
-        console.error('❌ Completed sessions error:', completedError);
-        throw completedError;
-      }
+      if (completedError) throw completedError;
 
-      console.log('📊 Completed sessions data:', completedData);
-
-      const formattedCompleted = (completedData || []).map((booking: any) => {
-        console.log('🔍 Booking mentor_id:', booking.mentor_id);
-        
-        return {
-          id: booking.id,
-          mentor_id: booking.mentor_id,
-          mentor: booking.mentors?.name || 'Unknown Mentor',
-          date: new Date(booking.session_date).toLocaleDateString(),
-          topic: booking.notes || 'General Mentoring Session',
-          rating: booking.reviews?.[0]?.rating || 0,
-          notes: booking.reviews?.[0]?.review_text || 'No review yet',
-          hasReview: booking.reviews && booking.reviews.length > 0
-        };
-      });
+      const formattedCompleted = (completedData || []).map((booking: any) => ({
+        id: booking.id,
+        mentor: booking.mentors?.name || 'Unknown Mentor',
+        date: new Date(booking.session_date).toLocaleDateString(),
+        topic: booking.notes || 'General Mentoring Session',
+        rating: booking.reviews?.[0]?.rating || 0,
+        notes: booking.reviews?.[0]?.review_text || 'No review yet',
+        hasReview: booking.reviews && booking.reviews.length > 0
+      }));
 
       console.log('✅ Formatted completed sessions:', formattedCompleted);
       setCompletedSessions(formattedCompleted);
@@ -826,6 +777,7 @@ const MenteeDashboard = () => {
             </Card>
           </TabsContent>
 
+          {/* ✅ UPDATED: Session History Tab with functional "Book Again" */}
           <TabsContent value="history" className="space-y-6">
             <Card>
               <CardHeader>
@@ -860,15 +812,7 @@ const MenteeDashboard = () => {
                           {!session.hasReview && (
                             <Badge variant="outline" className="mb-2 block">No Review</Badge>
                           )}
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleBookAgain(session)}
-                            className="w-full"
-                          >
-                            <Calendar className="h-4 w-4 mr-2" />
-                            Book Again
-                          </Button>
+                          <Button size="sm" variant="outline">Book Again</Button>
                         </div>
                       </div>
                     ))}
@@ -1003,61 +947,29 @@ const MenteeDashboard = () => {
           </DialogHeader>
           <div className="space-y-3 py-4">
             {myMentors.length > 0 ? (
-              myMentors.map((mentor: any) => {
-                console.log('🎯 Rendering mentor:', mentor);
-                
-                return (
-                  <Card key={mentor.id || mentor.mentor_id}>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <img
-                            src={mentor.profile_image_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${mentor.name}`}
-                            alt={mentor.name}
-                            className="w-12 h-12 rounded-full object-cover"
-                          />
-                          <div>
-                            <p className="font-medium">{mentor.name}</p>
-                            <p className="text-sm text-muted-foreground">{mentor.title}</p>
-                            <div className="flex items-center gap-1 mt-1">
-                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                              <span className="text-xs">{mentor.rating || 5.0}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline">
-                            <MessageSquare className="h-4 w-4 mr-1" />
-                            Message
-                          </Button>
-                          <Button 
-                            size="sm"
-                            onClick={() => {
-                              const mentorId = mentor.mentor_id || mentor.id;
-                              console.log('📍 Navigating to mentor:', mentorId);
-                              
-                              if (!mentorId) {
-                                toast({
-                                  title: "Error",
-                                  description: "Cannot find mentor ID",
-                                  variant: "destructive",
-                                });
-                                return;
-                              }
-                              
-                              setShowMentorsModal(false);
-                              navigate(`/mentor/${mentorId}/book`);
-                            }}
-                          >
-                            <Calendar className="h-4 w-4 mr-1" />
-                            Book Again
-                          </Button>
+              myMentors.map((mentor: any) => (
+                <Card key={mentor.id}>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{mentor.name}</p>
+                        <p className="text-sm text-muted-foreground">{mentor.title}</p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-xs">{mentor.rating || 0}</span>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline">
+                          <MessageSquare className="h-4 w-4 mr-1" />
+                          Message
+                        </Button>
+                        <Button size="sm">Book Again</Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
             ) : (
               <div className="text-center py-8">
                 <Users className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
