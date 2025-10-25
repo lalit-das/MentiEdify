@@ -36,7 +36,11 @@ const App = () => (
             <Route path="/categories" element={<CategoriesPage />} />
             <Route path="/mentor-dashboard" element={<ProtectedRoute><MentorDashboard /></ProtectedRoute>} />
             <Route path="/mentee-dashboard" element={<ProtectedRoute><MenteeDashboard /></ProtectedRoute>} />
+            
+            <Route path="/mentor/:mentorId/book" element={<ProtectedRoute><BookingPage /></ProtectedRoute>} />
+            
             <Route path="/booking" element={<ProtectedRoute><BookingPage /></ProtectedRoute>} />
+            
             <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/about" element={<AboutPage />} />
